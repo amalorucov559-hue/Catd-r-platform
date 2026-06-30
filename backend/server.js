@@ -1,103 +1,137 @@
-import express from "express";
-import cors from "cors";
-import { RESTAURANTS, COURIERS, CUSTOMER_POS } from "./data.js";
-
+const express = require('express');
 const app = express();
-app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 4000;
+// Port Sazlaması (Railway üçün dinamik port)
+const PORT = process.env.PORT || 3000;
 
+// Müvəqqəti Data Saxlanğıcı (Baza qoşulana qədər datalar yaddaşda saxlanılır)
 let orders = [];
-let orderSeq = 1004;
-let settings = { restaurant: 78, courier: 17, platform: 5 };
+let restaurants = [
+    { id: 1, name: "Dadlı Restoran", menu: [{ id: 101, name: "Dönər", price: 4.5 }, { id: 102, name: "Pizza", price: 12 }] },
+    { id: 2, name: "Seyfəli Dönər", menu: [{ id: 201, name: "Burger", price: 6 }, { id: 202, name: "Ayran", price: 1 }] }
+];
+let couriers = [
+    { id: 1, name: "Kuryer Raul", lat: 40.68, lng: 46.03, status: "available" } // Gəncə/Şəmkir koordinatları üçün test
+];
 
-const STATUS = {
-  PENDING: "pending",
-  PREPARING: "preparing",
-  READY: "ready",
-  PICKED_UP: "picked_up",
-  DELIVERING: "delivering",
-  DELIVERED: "delivered",
-};
+// ==========================================
+// 1. SİFARİŞÇİ (MÜŞTƏRİ) YOLLARI
+// ==========================================
 
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
+// Ana Səhifə Testi
+app.get('/', (req, res) => {
+    res.json({ message: "Catd-r Platform API Aktivdir! Sistem tam gücü ilə işləyir." });
+});
 
-setInterval(() => {
-  orders = orders.map((o) => {
-    if (o.status !== STATUS.PICKED_UP && o.status !== STATUS.DELIVERING) return o;
-    const rest = RESTAURANTS.find((r) => r.id === o.restaurantId);
-    let t = (o.progress ?? 0) + 0.06;
-    let status = o.status === STATUS.PICKED_UP ? STATUS.DELIVERING : o.status;
-    if (t >= 1) {
-      t = 1;
-      status = STATUS.DELIVERED;
-    }
-    return {
-      ...o,
-      progress: t,
-      status,
-      courierPos: { x: lerp(rest.pos.x, CUSTOMER_POS.x, t), y: lerp(rest.pos.y, CUSTOMER_POS.y, t) },
+// Restoranların siyahısını görmək
+app.get('/api/customer/restaurants', (req, res) => {
+    res.json(restaurants);
+});
+
+// Sifariş vermək
+app.post('/api/customer/order', (req, res) => {
+    const { restaurantId, items, customerLocation } = req.body;
+    const newOrder = {
+        id: orders.length + 1,
+        restaurantId,
+        items,
+        customerLocation,
+        status: "GÖZLƏNİLİR (Mətbəxdə)", // Statuslar: GÖZLƏNİLİR, HAZIRLANIR, HAZIRDIR, KURYERDƏ, ÇATDIRILDI
+        courierId: null
     };
-  });
-}, 700);
-
-app.get("/api/health", (req, res) => res.json({ ok: true }));
-
-app.get("/api/restaurants", (req, res) => res.json(RESTAURANTS));
-app.get("/api/couriers", (req, res) => res.json(COURIERS));
-app.get("/api/meta", (req, res) => res.json({ customerPos: CUSTOMER_POS }));
-
-app.get("/api/settings", (req, res) => res.json(settings));
-app.patch("/api/settings", (req, res) => {
-  const { restaurant, courier, platform } = req.body;
-  settings = {
-    restaurant: Number(restaurant ?? settings.restaurant),
-    courier: Number(courier ?? settings.courier),
-    platform: Number(platform ?? settings.platform),
-  };
-  res.json(settings);
+    orders.push(newOrder);
+    res.status(201).json({ message: "Sifariş uğurla restorana göndərildi!", order: newOrder });
 });
 
-app.get("/api/orders", (req, res) => {
-  const { restaurantId, courierId, customerName } = req.query;
-  let list = orders;
-  if (restaurantId) list = list.filter((o) => o.restaurantId === restaurantId);
-  if (courierId) list = list.filter((o) => o.courierId === courierId);
-  if (customerName) list = list.filter((o) => o.customerName === customerName);
-  res.json(list.slice().sort((a, b) => b.createdAt - a.createdAt));
+// Sifarişin statusunu və kuryerin harada olduğunu izləmək
+app.get('/api/customer/track/:orderId', (req, res) => {
+    const order = orders.find(o => o.id === parseInt(req.params.orderId));
+    if (!order) return res.status(404).json({ message: "Sifariş tapılmadı" });
+    
+    let courierInfo = null;
+    if (order.courierId) {
+        courierInfo = couriers.find(c => c.id === order.courierId);
+    }
+    
+    res.json({ orderStatus: order.status, courierLocation: courierInfo ? { lat: courierInfo.lat, lng: courierInfo.lng } : "Kuryer hələ təyin olunmayıb" });
 });
 
-app.post("/api/orders", (req, res) => {
-  const { customerName, restaurantId, items } = req.body;
-  if (!customerName || !restaurantId || !items?.length) {
-    return res.status(400).json({ error: "customerName, restaurantId, items mütləqdir" });
-  }
-  const total = items.reduce((s, i) => s + i.price * i.qty, 0);
-  const order = {
-    id: orderSeq++,
-    customerName,
-    restaurantId,
-    items,
-    total,
-    status: STATUS.PENDING,
-    courierId: null,
-    courierPos: null,
-    progress: 0,
-    createdAt: Date.now(),
-  };
-  orders.unshift(order);
-  res.status(201).json(order);
+
+// ==========================================
+// 2. RESTORAN VƏ MƏTBƏX YOLLARI
+// ==========================================
+
+// Restorana gələn sifarişləri görmək
+app.get('/api/restaurant/orders/:restaurantId', (req, res) => {
+    const resOrders = orders.filter(o => o.restaurantId === parseInt(req.params.restaurantId));
+    res.json(resOrders);
 });
 
-app.patch("/api/orders/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const idx = orders.findIndex((o) => o.id === id);
-  if (idx === -1) return res.status(404).json({ error: "Sifariş tapılmadı" });
-  orders[idx] = { ...orders[idx], ...req.body };
-  res.json(orders[idx]);
+// Restoranın sifarişi qəbul etməsi və ya statusu dəyişməsi (Hazırlanır / Hazırdır)
+app.put('/api/restaurant/order/:orderId', (req, res) => {
+    const order = orders.find(o => o.id === parseInt(req.params.orderId));
+    if (!order) return res.status(404).json({ message: "Sifariş tapılmadı" });
+    
+    const { status } = req.body; // "HAZIRLANIR" və ya "HAZIRDIR"
+    order.status = status;
+    
+    res.json({ message: `Sifariş statusu yeniləndi: ${status}`, order });
 });
 
-app.listen(PORT, () => console.log(`Backend ${PORT} portunda işləyir`));
+
+// ==========================================
+// 3. KURYER YOLLARI
+// ==========================================
+
+// Kuryerin öz canlı koordinatlarını serverə bildirməsi (Xəritədə izləmə üçün)
+app.post('/api/courier/location', (req, res) => {
+    const { courierId, lat, lng } = req.body;
+    const courier = couriers.find(c => c.id === courierId);
+    if (courier) {
+        courier.lat = lat;
+        courier.lng = lng;
+        return res.json({ message: "Koordinat yeniləndi", courier });
+    }
+    res.status(404).json({ message: "Kuryer tapılmadı" });
+});
+
+// Kuryerin yaxınlıqdakı "HAZIRDIR" statuslu sifarişləri görməsi
+app.get('/api/courier/available-orders', (req, res) => {
+    const availableOrders = orders.filter(o => o.status === "HAZIRDIR");
+    res.json(availableOrders);
+});
+
+// Kuryerin sifarişi götürməsi (Qəbul etməsi)
+app.put('/api/courier/accept-order', (req, res) => {
+    const { courierId, orderId } = req.body;
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return res.status(404).json({ message: "Sifariş tapılmadı" });
+    
+    order.courierId = courierId;
+    order.status = "KURYERDƏ (Yoldadır)";
+    res.json({ message: "Sifariş kuryer tərəfindən götürüldü, müştəri sizi izləyir!", order });
+});
+
+
+// ==========================================
+// 4. ADMİN PANEL YOLLARI
+// ==========================================
+
+// Bütün sistemdəki restoranları, kuryerləri və sifarişləri idarə etmək üçün
+app.get('/api/admin/dashboard', (req, res) => {
+    res.json({ totalOrders: orders.length, totalRestaurants: restaurants.length, totalCouriers: couriers.length, allOrders: orders });
+});
+
+// Yeni restoran əlavə etmək
+app.post('/api/admin/add-restaurant', (req, res) => {
+    const { name, menu } = req.body;
+    const newRes = { id: restaurants.length + 1, name, menu: menu || [] };
+    restaurants.push(newRes);
+    res.json({ message: "Yeni restoran sistemə əlavə edildi!", restaurant: newRes });
+});
+
+// Serveri İşə Salmaq
+app.listen(PORT, () => {
+    console.log(`Server ${PORT} portunda aktivdir.`);
+});
