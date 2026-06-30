@@ -2,34 +2,138 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-// Port Sazlaması (Railway üçün dinamik port)
 const PORT = process.env.PORT || 3000;
 
-// Müvəqqəti Data Saxlanğıcı (Baza qoşulana qədər datalar yaddaşda saxlanılır)
+// Müvəqqəti Data Saxlanğıcı
 let orders = [];
 let restaurants = [
-    { id: 1, name: "Dadlı Restoran", menu: [{ id: 101, name: "Dönər", price: 4.5 }, { id: 102, name: "Pizza", price: 12 }] },
-    { id: 2, name: "Seyfəli Dönər", menu: [{ id: 201, name: "Burger", price: 6 }, { id: 202, name: "Ayran", price: 1 }] }
+    { id: 1, name: "Dadlı Restoran (Mərkəz)", menu: [{ id: 101, name: "Dönər Çörəkdə", price: 4.5 }, { id: 102, name: "Miks Pizza", price: 12 }] },
+    { id: 2, name: "Seyfəli FastFood", menu: [{ id: 201, name: "Kral Burger", price: 6.5 }, { id: 202, name: "Soyuq Ayran", price: 1.0 }] }
 ];
 let couriers = [
-    { id: 1, name: "Kuryer Raul", lat: 40.68, lng: 46.03, status: "available" } // Gəncə/Şəmkir koordinatları üçün test
+    { id: 1, name: "Kuryer Raul", lat: 40.68, lng: 46.03, status: "available" }
 ];
 
-// ==========================================
-// 1. SİFARİŞÇİ (MÜŞTƏRİ) YOLLARI
-// ==========================================
-
-// Ana Səhifə Testi
+// VİZUAL MÜŞTƏRİ PANELİ (HTML / CSS / JavaScript birbaşa serverin daxilində)
 app.get('/', (req, res) => {
-    res.json({ message: "Catd-r Platform API Aktivdir! Sistem tam gücü ilə işləyir." });
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="az">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Catd-r Platform - Müştəri Paneli</title>
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+            header { background-color: #ff4757; color: white; padding: 15px; text-align: center; border-radius: 10px; margin-bottom: 20px; font-size: 24px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            .container { max-width: 600px; margin: 0 auto; }
+            .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+            h2 { color: #ff4757; margin-top: 0; border-bottom: 2px solid #f4f6f9; padding-bottom: 10px; }
+            select, button, input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+            button { background-color: #2ed573; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+            button:hover { background-color: #26af5f; }
+            .menu-item { display: flex; justify-content: space-between; background: #f9f9f9; padding: 10px; margin: 5px 0; border-radius: 6px; border-left: 4px solid #ff4757; }
+            .status-box { background-color: #dfe4ea; padding: 15px; border-radius: 8px; text-align: center; font-weight: bold; font-size: 18px; margin-top: 10px; color: #2f3542; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>🏍️ Catd-r Çatdırılma</header>
+            
+            <div class="card">
+                <h2>1. Restoran Seçin</h2>
+                <select id="restaurantSelect" onchange="loadMenu()">
+                    <option value="">-- Restoran seçin --</option>
+                    ${restaurants.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}
+                </select>
+                <div id="menuContainer"></div>
+            </div>
+
+            <div class="card" id="orderCard" style="display:none;">
+                <h2>2. Çatdırılma Ünvanı</h2>
+                <input type="text" id="locationInput" placeholder="Ünvanınızı yazın (məs: Şəmkir, Nizami küç.)">
+                <button onclick="giveOrder()">🛒 Sifarişi Tamamla</button>
+            </div>
+
+            <div class="card" id="trackingCard" style="display:none;">
+                <h2>📦 Sifarişinizin Statusu</h2>
+                <div id="statusDisplay" class="status-box">Gözlənilir...</div>
+                <p style="text-align:center; color:#777; font-size:14px;">Mətbəx sifarişi qəbul edəndə status anlıq yenilənəcək.</p>
+                <button onclick="checkStatus()" style="background-color:#1e90ff;">🔄 Statusu Yenilə</button>
+            </div>
+        </div>
+
+        <script>
+            let selectedRestaurantId = null;
+            let currentOrderId = null;
+            const restaurantsData = ${JSON.stringify(restaurants)};
+
+            function loadMenu() {
+                const select = document.getElementById('restaurantSelect');
+                selectedRestaurantId = select.value;
+                const menuContainer = document.getElementById('menuContainer');
+                const orderCard = document.getElementById('orderCard');
+                
+                if(!selectedRestaurantId) {
+                    menuContainer.innerHTML = '';
+                    orderCard.style.display = 'none';
+                    return;
+                }
+
+                const restaurant = restaurantsData.find(r => r.id == selectedRestaurantId);
+                let menuHtml = '<h3>Menyu:</h3>';
+                restaurant.menu.forEach(item => {
+                    menuHtml += \`
+                        <div class="menu-item">
+                            <span>\${item.name}</span>
+                            <strong>\${item.price} AZN</strong>
+                        </div>
+                    \`;
+                });
+                menuContainer.innerHTML = menuHtml;
+                orderCard.style.display = 'block';
+            }
+
+            async function giveOrder() {
+                const location = document.getElementById('locationInput').value;
+                if(!location) {
+                    alert('Zəhmət olmasa ünvanı qeyd edin!');
+                    return;
+                }
+
+                const response = await fetch('/api/customer/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        restaurantId: parseInt(selectedRestaurantId),
+                        items: ["Test Yemək"],
+                        customerLocation: location
+                    })
+                });
+                const data = await response.json();
+                currentOrderId = data.order.id;
+                
+                alert(data.message);
+                document.getElementById('trackingCard').style.style.display = 'block';
+                document.getElementById('statusDisplay').innerText = data.order.status;
+                document.getElementById('trackingCard').scrollIntoView({ behavior: 'smooth' });
+            }
+
+            async function checkStatus() {
+                if(!currentOrderId) return;
+                const response = await fetch('/api/customer/track/' + currentOrderId);
+                const data = await response.json();
+                document.getElementById('statusDisplay').innerText = data.orderStatus;
+            }
+        </script>
+    </body>
+    </html>
+    `);
 });
 
-// Restoranların siyahısını görmək
-app.get('/api/customer/restaurants', (req, res) => {
-    res.json(restaurants);
-});
+// API YOLLARI (Arxa fon məntiqləri)
+app.get('/api/customer/restaurants', (req, res) => res.json(restaurants));
 
-// Sifariş vermək
 app.post('/api/customer/order', (req, res) => {
     const { restaurantId, items, customerLocation } = req.body;
     const newOrder = {
@@ -37,101 +141,19 @@ app.post('/api/customer/order', (req, res) => {
         restaurantId,
         items,
         customerLocation,
-        status: "GÖZLƏNİLİR (Mətbəxdə)", // Statuslar: GÖZLƏNİLİR, HAZIRLANIR, HAZIRDIR, KURYERDƏ, ÇATDIRILDI
+        status: "GÖZLƏNİLİR (Mətbəxdə)",
         courierId: null
     };
     orders.push(newOrder);
-    res.status(201).json({ message: "Sifariş uğurla restorana göndərildi!", order: newOrder });
+    res.status(201).json({ message: "Sifarişiniz mətbəxə ötürüldü!", order: newOrder });
 });
 
-// Sifarişin statusunu və kuryerin harada olduğunu izləmək
 app.get('/api/customer/track/:orderId', (req, res) => {
     const order = orders.find(o => o.id === parseInt(req.params.orderId));
     if (!order) return res.status(404).json({ message: "Sifariş tapılmadı" });
-    
-    let courierInfo = null;
-    if (order.courierId) {
-        courierInfo = couriers.find(c => c.id === order.courierId);
-    }
-    
-    res.json({ orderStatus: order.status, courierLocation: courierInfo ? { lat: courierInfo.lat, lng: courierInfo.lng } : "Kuryer hələ təyin olunmayıb" });
+    res.json({ orderStatus: order.status });
 });
 
-
-// ==========================================
-// 2. RESTORAN VƏ MƏTBƏX YOLLARI
-// ==========================================
-
-// Restorana gələn sifarişləri görmək
-app.get('/api/restaurant/orders/:restaurantId', (req, res) => {
-    const resOrders = orders.filter(o => o.restaurantId === parseInt(req.params.restaurantId));
-    res.json(resOrders);
-});
-
-// Restoranın sifarişi qəbul etməsi və ya statusu dəyişməsi (Hazırlanır / Hazırdır)
-app.put('/api/restaurant/order/:orderId', (req, res) => {
-    const order = orders.find(o => o.id === parseInt(req.params.orderId));
-    if (!order) return res.status(404).json({ message: "Sifariş tapılmadı" });
-    
-    const { status } = req.body; // "HAZIRLANIR" və ya "HAZIRDIR"
-    order.status = status;
-    
-    res.json({ message: `Sifariş statusu yeniləndi: ${status}`, order });
-});
-
-
-// ==========================================
-// 3. KURYER YOLLARI
-// ==========================================
-
-// Kuryerin öz canlı koordinatlarını serverə bildirməsi (Xəritədə izləmə üçün)
-app.post('/api/courier/location', (req, res) => {
-    const { courierId, lat, lng } = req.body;
-    const courier = couriers.find(c => c.id === courierId);
-    if (courier) {
-        courier.lat = lat;
-        courier.lng = lng;
-        return res.json({ message: "Koordinat yeniləndi", courier });
-    }
-    res.status(404).json({ message: "Kuryer tapılmadı" });
-});
-
-// Kuryerin yaxınlıqdakı "HAZIRDIR" statuslu sifarişləri görməsi
-app.get('/api/courier/available-orders', (req, res) => {
-    const availableOrders = orders.filter(o => o.status === "HAZIRDIR");
-    res.json(availableOrders);
-});
-
-// Kuryerin sifarişi götürməsi (Qəbul etməsi)
-app.put('/api/courier/accept-order', (req, res) => {
-    const { courierId, orderId } = req.body;
-    const order = orders.find(o => o.id === orderId);
-    if (!order) return res.status(404).json({ message: "Sifariş tapılmadı" });
-    
-    order.courierId = courierId;
-    order.status = "KURYERDƏ (Yoldadır)";
-    res.json({ message: "Sifariş kuryer tərəfindən götürüldü, müştəri sizi izləyir!", order });
-});
-
-
-// ==========================================
-// 4. ADMİN PANEL YOLLARI
-// ==========================================
-
-// Bütün sistemdəki restoranları, kuryerləri və sifarişləri idarə etmək üçün
-app.get('/api/admin/dashboard', (req, res) => {
-    res.json({ totalOrders: orders.length, totalRestaurants: restaurants.length, totalCouriers: couriers.length, allOrders: orders });
-});
-
-// Yeni restoran əlavə etmək
-app.post('/api/admin/add-restaurant', (req, res) => {
-    const { name, menu } = req.body;
-    const newRes = { id: restaurants.length + 1, name, menu: menu || [] };
-    restaurants.push(newRes);
-    res.json({ message: "Yeni restoran sistemə əlavə edildi!", restaurant: newRes });
-});
-
-// Serveri İşə Salmaq
 app.listen(PORT, () => {
-    console.log(`Server ${PORT} portunda aktivdir.`);
+    console.log(`Server running on port ${PORT}`);
 });
