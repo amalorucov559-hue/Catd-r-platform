@@ -1,16 +1,10 @@
 {
-  "name": "bazar-yol",
-  "version": "1.0.0",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS"
   },
-  "engines": {
-    "node": "18.x"
-  },
-  "dependencies": {
-    "better-sqlite3": "^11.3.0",
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
+  "deploy": {
+    "startCommand": "node server.js",
+    "restartPolicyType": "ON_FAILURE"
   }
 }
