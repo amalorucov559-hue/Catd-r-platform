@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Bazar Yol 🛒</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root{
+  --bg:#0d1117;--card:#161b22;--border:#30363d;
+  --blue:#2563eb;--green:#16a34a;--orange:#ea580c;
+  --gold:#f59e0b;--ink:#f0f6fc;--muted:#8b949e;--soft:#21262d;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+header{background:#0d1117;border-bottom:1px solid var(--border);padding:.8rem 1rem;
+  display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:99}
+.brand{display:flex;align-items:center;gap:.6rem}
+.brand .logo{font-size:1.6rem}
+.brand h1{font-size:1.15rem;font-weight:700}
+.brand small{font-size:.7rem;color:var(--muted)}
+nav{display:flex;gap:.35rem;flex-wrap:wrap}
+nav button{background:var(--soft);color:var(--muted);border:1px solid var(--border);
+  padding:.4rem .7rem;border-radius:.5rem;cursor:pointer;font-size:.8rem;font-weight:600;transition:all .2s}
+nav button:hover{border-color:var(--blue);color:var(--ink)}
+nav button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+main{max-width:680px;margin:0 auto;padding:.9rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:.75rem;padding:.9rem;margin-bottom:.75rem}
+.label{font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem;display:block}
+.muted{color:var(--muted);font-size:.85rem}
+.row{display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:none}
+.btn{border:none;cursor:pointer;font-weight:700;border-radius:.5rem;font-family:inherit;transition:filter .15s}
+.btn:hover{filter:brightness(1.1)}
+.btn.blue{background:var(--blue);color:#fff;padding:.5rem .9rem;font-size:.85rem}
+.btn.green{background:var(--green);color:#fff;padding:.5rem .9rem;font-size:.85rem}
+.btn.orange{background:var(--orange);color:#fff;padding:.5rem .9rem;font-size:.85rem}
+.btn.ghost{background:var(--soft);color:var(--ink);border:1px solid var(--border);padding:.5rem .9rem;font-size:.85rem}
+.btn.full{width:100%;margin-top:.6rem;padding:.65rem}
+.btn:disabled{opacity:.5;cursor:default}
+.market-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:.6rem;margin-bottom:.8rem}
+.market-card{background:var(--card);border:2px solid var(--border);border-radius:.75rem;
+  padding:.9rem;cursor:pointer;transition:all .2s;text-align:center}
+.market-card:hover,.market-card.sel{border-color:var(--blue);background:var(--soft)}
+.market-card .icon{font-size:2rem;margin-bottom:.3rem}
+.market-card .mname{font-weight:700;font-size:.95rem}
+.market-card .mcat{font-size:.75rem;color:var(--muted);margin-top:.1rem}
+.cat-label{font-size:.7rem;color:var(--gold);font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:.3rem 0;margin-top:.4rem;display:block}
+.status-bar{display:flex;align-items:center;gap:.6rem;background:var(--soft);
+  border:1px solid var(--border);border-radius:.6rem;padding:.6rem .9rem;margin-bottom:.8rem;
+  font-size:.9rem;font-weight:600}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.dot.blue{background:var(--blue);animation:pulse 1.2s ease-in-out infinite}
+.dot.green{background:var(--green)}
+.dot.orange{background:var(--orange);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.map-wrap{position:relative;width:100%;aspect-ratio:4/3;border-radius:.75rem;
+  overflow:hidden;border:1px solid var(--border);background:#0a1628}
+.map-wrap svg{position:absolute;inset:0;width:100%;height:100%}
+.map-hint{font-size:.75rem;color:var(--muted);margin-top:.4rem}
+.spinner{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--blue);
+  border-radius:50%;animation:spin .8s linear infinite;margin:2rem auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.badge{display:inline-block;padding:.15rem .5rem;border-radius:999px;font-size:.7rem;font-weight:700}
+.badge.new{background:#1e3a5f;color:#60a5fa}
+.badge.ready{background:#14532d;color:#4ade80}
+.cart-count{background:#dc2626;color:#fff;border-radius:999px;
+  font-size:.7rem;padding:.05rem .35rem;font-weight:700;margin-left:.3rem}
+input[type=text]{width:100%;margin-top:.6rem;background:var(--soft);border:1px solid var(--border);
+  border-radius:.5rem;padding:.55rem .75rem;color:var(--ink);font-family:inherit;font-size:.85rem}
+input[type=text]:focus{outline:none;border-color:var(--blue)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">🛒</div>
+    <div><h1>Bazar Yol</h1><small>Sürətli market çatdırılması</small></div>
+  </div>
+  <nav id="nav">
+    <button data-rol="musteri" class="on">🛒 Müştəri</button>
+    <button data-rol="market">🏪 Market</button>
+    <button data-rol="kuryer">🛵 Kuryer</button>
+  </nav>
+</header>
+<main id="app"><div class="spinner"></div></main>
+<script>
+const socket=io();
+let rol="musteri",markets=null,secilenMarket=null,products=null,sebet={};
+let sifarisId=localStorage.getItem("bsid")||null;
+let musteriXY={x:72,y:68};
+let activeCourierId=+(localStorage.getItem("bcid")||1);
+let moveTimer=null;
+const SCALE=0.005;
+const $=id=>document.getElementById(id);
+const ICONS={"FreshMart":"🏬","GreenBasket":"🌿","QuickShop":"⚡"};
+const ST={
+  yeni:       ["blue",  "Sifariş qəbul edildi, market hazırlayır…"],
+  hazir:      ["orange","Sifariş hazırdır, kuryer gözlənilir…"],
+  yolda:      ["green", "Kuryer sifarişinizi gətirir!"],
+  catdirildi: ["green", "Çatdırıldı ✓"]
+};
+function ll2xy(lat,lng,o){return{x:50+(lng-o.lng)/SCALE,y:50-(lat-o.lat)/SCALE}}
+function xy2ll(x,y,o){return{lat:o.lat-(y-50)*SCALE,lng:o.lng+(x-50)*SCALE}}
+function lerp(a,b,t){return a+(b-a)*t}
+const api=async(p,o={})=>{
+  const r=await fetch(p,{headers:{"Content-Type":"application/json"},...o});
+  if(!r.ok){const e=await r.json();throw new Error(e.error||"Xəta")}
+  return r.json();
+};
+function mapSVG({mXY,hXY,kXY,hLabel,click}={}){
+  const mx=mXY?.x??50,my=mXY?.y??50;
+  return`<div class="map-wrap">
+  <svg viewBox="0 0 100 100" ${click?'id="cmap" style="cursor:crosshair"':''}>
+    <defs><pattern id="g" width="6" height="6" patternUnits="userSpaceOnUse">
+      <path d="M6 0L0 0 0 6" fill="none" stroke="#1a2744" stroke-width=".35"/></pattern></defs>
+    <rect width="100" height="100" fill="url(#g)"/>
+    <line x1="0" y1="50" x2="100" y2="50" stroke="#1e3a5f" stroke-width=".5"/>
+    <line x1="50" y1="0" x2="50" y2="100" stroke="#1e3a5f" stroke-width=".5"/>
+    ${hXY?`<line x1="${mx}" y1="${my}" x2="${hXY.x}" y2="${hXY.y}" stroke="#f59e0b" stroke-width=".7" stroke-dasharray="2,2" opacity=".6"/>`:''}
+    <rect x="${mx-6}" y="${my-5.5}" width="12" height="8" rx="1.5" fill="#1d4ed8"/>
+    <text x="${mx}" y="${my+.5}" text-anchor="middle" font-size="3.5" fill="#fff" font-weight="700">🏪</text>
+    <text x="${mx}" y="${my-7}" text-anchor="middle" font-size="3.2" fill="#93c5fd" font-weight="700">Market</text>
+    ${hXY?`<circle cx="${hXY.x}" cy="${hXY.y}" r="4" fill="#16a34a"/>
+      <text x="${hXY.x}" y="${hXY.y-6}" text-anchor="middle" font-size="3.2" fill="#86efac" font-weight="700">${hLabel||'Ünvan'}</text>`:''}
+    ${kXY?`<circle cx="${kXY.x}" cy="${kXY.y}" r="3.8" fill="#f59e0b" stroke="#0d1117" stroke-width=".6">
+      <animate attributeName="r" values="3;4.5;3" dur="1.4s" repeatCount="indefinite"/></circle>
+      <text x="${kXY.x}" y="${kXY.y-6}" text-anchor="middle" font-size="3.2" fill="#fcd34d" font-weight="700">🛵 Kuryer</text>`:''}
+  </svg></div>`;
+}
+
+// ── MÜŞTƏRİ ──────────────────────────────────────────────────
+async function renderMusteri(){
+  if(!markets)markets=await api("/api/markets");
+  if(sifarisId){
+    const o=await api(`/api/orders/${sifarisId}`).catch(()=>null);
+    if(o&&o.status!=="catdirildi"){
+      socket.emit("qosul_sifaris",sifarisId);
+      const orig=markets.find(m=>m.id===o.market_id)||{lat:40.4093,lng:49.8671};
+      const mXY=ll2xy(orig.lat,orig.lng,orig);
+      const hXY=ll2xy(o.customer_lat,o.customer_lng,orig);
+      const kXY=o.courier_lat?ll2xy(o.courier_lat,o.courier_lng,orig):null;
+      const[dc,dt]=ST[o.status]||["blue",o.status];
+      $("app").innerHTML=`<div class="card">
+        <span class="label">Sifariş #${o.id} — ${o.market?.name||""}</span>
+        <div class="status-bar"><span class="dot ${dc}"></span>${dt}</div>
+        ${o.status==="yolda"?mapSVG({mXY,hXY,kXY,hLabel:"Eviniz"}):""}
+        <div class="row" style="margin-top:.4rem"><span class="muted">Ünvan</span><span>${o.customer_addr||"—"}</span></div>
+        <div class="row"><span class="muted">Cəmi</span><b style="font-size:1.1rem">${o.total.toFixed(2)}₼</b></div>
+      </div>`;return;
+    }
+    if(o&&o.status==="catdirildi"){
+      $("app").innerHTML=`<div class="card" style="text-align:center;padding:1.5rem">
+        <div style="font-size:2.5rem;margin-bottom:.5rem">🎉</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#4ade80">Sifarişiniz çatdırıldı!</div>
+        <div class="muted" style="margin:.4rem 0 1rem">Nuş olsun!</div>
+        <button class="btn green" id="btnYeni">Yeni sifariş ver</button></div>`;
+      $("btnYeni").onclick=()=>{localStorage.removeItem("bsid");sifarisId=null;sebet={};secilenMarket=null;products=null;renderMusteri()};return;
+    }
+    sifarisId=null;localStorage.removeItem("bsid");
+  }
+  if(!secilenMarket){
+    $("app").innerHTML=`<div class="card">
+      <span class="label">Marketlər</span>
+      <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:.75rem">Hansı marketdən sifariş vermək istərsiniz?</h2>
+      <div class="market-grid">
+        ${markets.map(m=>`<div class="market-card" data-mid="${m.id}">
+          <div class="icon">${ICONS[m.name]||"🏪"}</div>
+          <div class="mname">${m.name}</div>
+          <div class="mcat">${m.category}</div></div>`).join("")}
+      </div></div>`;
+    document.querySelectorAll("[data-mid]").forEach(el=>{
+      el.onclick=async()=>{
+        secilenMarket=markets.find(m=>m.id==el.dataset.mid);
+        products=await api(`/api/markets/${secilenMarket.id}/products`);
+        sebet={};renderMusteri();
+      };
+    });return;
+  }
+  const cats=[...new Set(products.map(p=>p.category))];
+  const cemi=Object.entries(sebet).reduce((t,[id,q])=>t+(products.find(p=>p.id==id)?.price||0)*q,0);
+  const sebetCount=Object.values(sebet).reduce((s,q)=>s+q,0);
+  const orig=secilenMarket;
+  $("app").innerHTML=`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><span class="label">Seçilmiş market</span>
+          <div style="font-weight:700;font-size:1.1rem">${ICONS[secilenMarket.name]||"🏪"} ${secilenMarket.name}</div>
+          <div class="muted">${secilenMarket.category}</div></div>
+        <button class="btn ghost" id="btnBack">← Geri</button>
+      </div>
+    </div>
+    <div class="card">
+      <span class="label">Çatdırılma ünvanı — xəritəyə klikləyin</span>
+      ${mapSVG({mXY:ll2xy(orig.lat,orig.lng,orig),hXY:musteriXY,hLabel:"Eviniz",click:true})}
+      <p class="map-hint">📍 Evinizin yerini xəritəyə klikləyərək seçin</p>
+      <input type="text" id="addrInput" placeholder="Ünvan yazın (küçə, bina №)…"/>
+    </div>
+    <div class="card">
+      <span class="label">Məhsullar ${sebetCount?`<span class="cart-count">${sebetCount}</span>`:""}</span>
+      ${cats.map(cat=>`<span class="cat-label">${cat}</span>
+        ${products.filter(p=>p.category===cat).map(p=>`
+          <div class="row">
+            <div><span style="font-weight:600">${p.name}</span>
+              <span class="muted" style="margin-left:.3rem">/ ${p.unit}</span></div>
+            <div style="display:flex;align-items:center;gap:.5rem">
+              <span style="font-weight:700">${p.price.toFixed(2)}₼</span>
+              ${sebet[p.id]?`<button class="btn ghost" style="padding:.25rem .55rem" data-minus="${p.id}">−</button>
+                <span style="min-width:1.2rem;text-align:center;font-weight:700">${sebet[p.id]}</span>`:""}
+              <button class="btn blue" style="padding:.25rem .6rem" data-plus="${p.id}">＋</button>
+            </div>
+          </div>`).join("")}`).join("")}
+    </div>
+    ${sebetCount?`<div class="card">
+      <span class="label">Səbət</span>
+      ${Object.entries(sebet).map(([id,q])=>{const p=products.find(x=>x.id==id);
+        return`<div class="row"><span>${p.name} ×${q}</span><span>${(p.price*q).toFixed(2)}₼</span></div>`}).join("")}
+      <div class="row muted"><span>Çatdırılma haqqı</span><span>2.00₼</span></div>
+      <div class="row"><b>Cəmi</b><b style="font-size:1.1rem">${(cemi+2).toFixed(2)}₼</b></div>
+      <button class="btn green full" id="btnSifaris">Sifarişi təsdiqlə →</button></div>`:""}
+  `;
+  $("btnBack").onclick=()=>{secilenMarket=null;products=null;sebet={};renderMusteri()};
+  document.querySelectorAll("[data-plus]").forEach(b=>{b.onclick=()=>{const id=b.dataset.plus;sebet[id]=(sebet[id]||0)+1;renderMusteri()}});
+  document.querySelectorAll("[data-minus]").forEach(b=>{b.onclick=()=>{const id=b.dataset.minus;if(sebet[id]>1)sebet[id]--;else delete sebet[id];renderMusteri()}});
+  const cmap=$("cmap");
+  if(cmap)cmap.addEventListener("click",e=>{
+    const rc=cmap.getBoundingClientRect();
+    musteriXY={x:(e.clientX-rc.left)/rc.width*100,y:(e.clientY-rc.top)/rc.height*100};renderMusteri()});
+  const bs=$("btnSifaris");
+  if(bs)bs.onclick=async()=>{
+    bs.disabled=true;bs.textContent="Göndərilir…";
+    const{lat,lng}=xy2ll(musteriXY.x,musteriXY.y,orig);
+    const addr=$("addrInput")?.value||"";
+    const items=Object.entries(sebet).map(([id,qty])=>({id:+id,qty}));
+    try{
+      const o=await api("/api/orders",{method:"POST",
+        body:JSON.stringify({market_id:secilenMarket.id,items,customerLat:lat,customerLng:lng,customerAddr:addr})});
+      sifarisId=o.id;localStorage.setItem("bsid",o.id);sebet={};renderMusteri();
+    }catch(e){alert(e.message);bs.disabled=false;bs.textContent="Sifarişi təsdiqlə →"}
+  };
+}
+
+// ── MARKET PANELİ ─────────────────────────────────────────────
+async function renderMarket(){
+  if(!markets)markets=await api("/api/markets");
+  markets.forEach(m=>socket.emit("qosul_market",m.id));
+  const[allNew,allReady]=await Promise.all([api("/api/orders?status=yeni"),api("/api/orders?status=hazir")]);
+  $("app").innerHTML=`<div class="card">
+    <span class="label">Market paneli</span>
+    <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:.4rem">🏪 Daxil olan sifarişlər</h2></div>
+    ${allNew.length===0&&allReady.length===0?`<div class="card muted" style="text-align:center;padding:1.5rem">Hələ sifariş yoxdur.</div>`:""}
+    ${allNew.map(o=>`<div class="card" style="border-left:4px solid var(--blue)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
+        <div><span class="label">${o.market?.name||""}</span>
+          <div style="font-weight:700">Sifariş #${o.id}</div></div>
+        <span class="badge new">Yeni</span></div>
+      ${o.items.map(i=>`<div class="row"><span>${i.name}</span>
+        <span>${i.qty} ${i.unit} · ${(i.price*i.qty).toFixed(2)}₼</span></div>`).join("")}
+      <div class="row muted"><span>Ünvan</span><span>${o.customer_addr||"—"}</span></div>
+      <div class="row"><b>Cəmi</b><b>${o.total.toFixed(2)}₼</b></div>
+      <button class="btn green" data-ready="${o.id}" style="margin-top:.7rem;width:100%">✓ Hazırdır — kuryerlərə bildir</button>
+    </div>`).join("")}
+    ${allReady.map(o=>`<div class="card" style="border-left:4px solid var(--orange)">
+      <div style="display:flex;justify-content:space-between">
+        <div style="font-weight:700">Sifariş #${o.id}</div>
+        <span class="badge ready">Hazır — kuryer gözlənilir</span></div></div>`).join("")}`;
+  document.querySelectorAll("[data-ready]").forEach(b=>{
+    b.onclick=async()=>{b.disabled=true;b.textContent="Göndərilir…";
+      await api(`/api/orders/${b.dataset.ready}/ready`,{method:"POST"});renderMarket()}});
+}
+
+// ── KURYER PANELİ ─────────────────────────────────────────────
+async function renderKuryer(){
+  socket.emit("qosul_kuryerler");
+  socket.emit("qosul_kuryer",activeCourierId);
+  if(!markets)markets=await api("/api/markets");
+  const kuryerler=await api("/api/couriers");
+  const k=kuryerler.find(c=>c.id==activeCourierId)||kuryerler[0];
+  const[yolda,hazir]=await Promise.all([
+    api(`/api/orders?status=yolda&courier_id=${k.id}`),
+    api("/api/orders?status=hazir")]);
+  const meninSif=yolda.find(o=>o.courier_id===k.id);
+  const topCard=`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><span class="label">Aktiv kuryer</span>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.3rem">
+          ${kuryerler.map(c=>`<button class="btn ${c.id==k.id?"blue":"ghost"}" style="padding:.3rem .65rem;font-size:.8rem" data-kid="${c.id}">🛵 ${c.name}</button>`).join("")}
+        </div></div>
+      <div style="text-align:right"><span class="label">Balans</span>
+        <div style="font-size:1.5rem;font-weight:700;color:var(--gold)" id="balDisplay">${k.balance.toFixed(2)}₼</div>
+      </div></div></div>`;
+  if(meninSif){
+    const orig=markets.find(m=>m.id===meninSif.market_id)||{lat:40.4093,lng:49.8671};
+    const mXY=ll2xy(orig.lat,orig.lng,orig);
+    const hXY=ll2xy(meninSif.customer_lat,meninSif.customer_lng,orig);
+    const kXY=meninSif.courier_lat?ll2xy(meninSif.courier_lat,meninSif.courier_lng,orig):mXY;
+    $("app").innerHTML=topCard+`<div class="card" style="border-left:4px solid var(--green)">
+      <div class="status-bar"><span class="dot green"></span>Sifariş #${meninSif.id} çatdırılır…</div>
+      ${mapSVG({mXY,hXY,kXY,hLabel:"Müştəri"})}
+      <div class="row" style="margin-top:.5rem"><span class="muted">Müştəri ünvanı</span><span>${meninSif.customer_addr||"—"}</span></div>
+      <div class="row"><span class="muted">Qazanc</span>
+        <span style="color:var(--gold);font-weight:700">${meninSif.delivery_fee.toFixed(2)}₼</span></div></div>`;
+    document.querySelectorAll("[data-kid]").forEach(b=>{b.onclick=()=>{activeCourierId=+b.dataset.kid;localStorage.setItem("bcid",activeCourierId);renderKuryer()}});
+    startMove(meninSif,orig,k.id);return;
+  }
+  clearInterval(moveTimer);
+  $("app").innerHTML=topCard+`
+    ${hazir.length===0?`<div class="card muted" style="text-align:center;padding:1.5rem">Hazırda sifariş yoxdur.</div>`:""}
+    ${hazir.map(o=>`<div class="card" style="border-left:4px solid var(--orange)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
+        <div><span class="label">${o.market?.name||""}</span>
+          <div style="font-weight:700">Sifariş #${o.id}</div></div>
+        <span class="badge ready">Hazır</span></div>
+      ${o.items.map(i=>`<div class="row"><span>${i.name}</span><span>×${i.qty}</span></div>`).join("")}
+      <div class="row"><span class="muted">Ünvan</span><span>${o.customer_addr||"—"}</span></div>
+      <div class="row"><span class="muted">Qazanc</span>
+        <span style="color:var(--gold);font-weight:700">${o.delivery_fee.toFixed(2)}₼</span></div>
+      <button class="btn orange" data-accept="${o.id}" style="width:100%;margin-top:.7rem">✓ Sifarişi qəbul et</button>
+    </div>`).join("")}`;
+  document.querySelectorAll("[data-kid]").forEach(b=>{b.onclick=()=>{activeCourierId=+b.dataset.kid;localStorage.setItem("bcid",activeCourierId);renderKuryer()}});
+  document.querySelectorAll("[data-accept]").forEach(b=>{
+    b.onclick=async()=>{b.disabled=true;b.textContent="Qəbul edilir…";
+      await api(`/api/orders/${b.dataset.accept}/accept`,{method:"POST",body:JSON.stringify({courierId:k.id})});
+      renderKuryer()}});
+}
+
+function startMove(order,orig,courierId){
+  clearInterval(moveTimer);let t=0;
+  const s={lat:orig.lat,lng:orig.lng};
+  const e={lat:order.customer_lat,lng:order.customer_lng};
+  moveTimer=setInterval(async()=>{
+    t+=0.03;
+    if(t>=1){clearInterval(moveTimer);
+      await api(`/api/orders/${order.id}/deliver`,{method:"POST"});
+      if(rol==="kuryer")renderKuryer();return;}
+    const lat=lerp(s.lat,e.lat,t),lng=lerp(s.lng,e.lng,t);
+    await api(`/api/orders/${order.id}/location`,{method:"POST",body:JSON.stringify({lat,lng,courierId})});
+  },500);
+}
+
+function setRol(r){
+  rol=r;
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.rol===r));
+  clearInterval(moveTimer);
+  if(r==="musteri")renderMusteri();
+  if(r==="market")renderMarket();
+  if(r==="kuryer")renderKuryer();
+}
+$("nav").addEventListener("click",e=>{
+  if(e.target.tagName==="BUTTON"&&e.target.dataset.rol)setRol(e.target.dataset.rol)});
+
+socket.on("yeni_sifaris",      ()=>{if(rol==="market")renderMarket()});
+socket.on("sifaris_hazir",     ()=>{if(rol==="kuryer")renderKuryer()});
+socket.on("sifaris_goturuldu", ()=>{if(rol==="kuryer")renderKuryer()});
+socket.on("kuryer_qebul_etdi", ()=>{if(rol==="musteri")renderMusteri()});
+socket.on("kuryer_mekan",      ()=>{if(rol==="musteri")renderMusteri()});
+socket.on("sifaris_catdirildi",()=>{if(rol==="musteri")renderMusteri()});
+socket.on("balans_yenilendi",  k=>{const d=$("balDisplay");if(d)d.textContent=k.balance.toFixed(2)+"₼"});
+
+renderMusteri();
+</script>
+</body>
+</html>
